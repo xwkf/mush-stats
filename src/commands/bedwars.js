@@ -16,10 +16,22 @@ import {
   buildBedwarsMissionsSelect,
   buildBedwarsMonthlyEmbed,
   buildBedwarsMonthlyModeSelect,
+  buildBedwarsSessionEmbed,
+  buildBedwarsSessionModeSelect,
+  buildBedwarsWeeklyEmbed,
+  buildBedwarsWeeklyModeSelect,
 } from '../services/bedwarsMenu.js';
+import { ensureSession } from '../services/bedwarsSessions.js';
 import { renderQuickBuyImage } from '../services/bedwarsQuickBuyImage.js';
-import { fetchBedwarsQuickBuy, fetchBedwarsXpTable, fetchMissions } from '../services/mush.js';
-import { resolvePlayer } from '../services/playerResolver.js';
+import { buildLinkAccountEmbed } from '../services/linkAccountEmbed.js';
+import {
+  fetchBedwarsLeaderboard,
+  fetchBedwarsQuickBuy,
+  fetchBedwarsXpTable,
+  fetchMissions,
+  findBedwarsLeaderboardEntry,
+} from '../services/mush.js';
+import { isValidNick, resolvePlayer } from '../services/playerResolver.js';
 import { getFooterIcon } from '../utils/footer.js';
 
 export default {
@@ -48,6 +60,22 @@ export default {
             .setDescription('Nick do jogador (opcional)')
             .setRequired(false),
         ),
+    )
+    .addSubcommand((subcommand) =>
+      subcommand
+        .setName('semanal')
+        .setDescription('⌈Mush⌋ Verifique as estatisticas Semanais de um jogador no Bed Wars.')
+        .addStringOption((option) =>
+          option
+            .setName('nick')
+            .setDescription('Nick do jogador (opcional)')
+            .setRequired(false),
+        ),
+    )
+    .addSubcommand((subcommand) =>
+      subcommand
+        .setName('sessao')
+        .setDescription('⌈Mush⌋ Verifique as estatisticas por Sessão no Bed Wars.'),
     )
     .addSubcommand((subcommand) =>
       subcommand
@@ -85,6 +113,7 @@ export default {
   async execute(interaction) {
     const loadingEmoji = getEmoji('Relogiozinho') || '⏳';
     const errorEmoji = getEmoji('Errado') || '❌';
+    const botErrorEmoji = getEmoji('ErradoBOT') || errorEmoji;
     const subcommand = interaction.options.getSubcommand();
 
     await interaction.reply({ content: `${loadingEmoji} **»** Carregando...` });
@@ -92,25 +121,42 @@ export default {
     const nick = interaction.options.getString('nick')?.trim();
 
     try {
-      const player = await resolvePlayer(interaction.user, nick);
+      if (nick && !isValidNick(nick)) {
+        await interaction.editReply({
+          content: `${botErrorEmoji} **»** O nick inserido possui caracteres inválidas.`,
+        });
+        return;
+      }
+
+      const player = await resolvePlayer(
+        interaction.user,
+        nick,
+        subcommand === 'semanal' ? 'weekly' : undefined,
+      );
 
       if (!player) {
-        const message = nick
-          ? `Jogador \`${nick}\` não encontrado.`
-          : `Nenhuma conta vinculada ao seu Discord foi encontrada. Use \`/bedwars ${subcommand} <nick>\` uma vez para vincular.`;
-
-        await interaction.editReply({ content: `${errorEmoji} **»** ${message}` });
+        if (nick) {
+          await interaction.editReply({
+            content: `${botErrorEmoji} **»** Este jogador não está registrado.`,
+          });
+        } else {
+          await interaction.editReply({ embeds: [buildLinkAccountEmbed()] });
+        }
         return;
       }
 
       const footerIcon = await getFooterIcon(interaction.client);
 
       if (subcommand === 'geral') {
-        const xpTable = await fetchBedwarsXpTable();
+        const [xpTable, leaderboard] = await Promise.all([
+          fetchBedwarsXpTable(),
+          fetchBedwarsLeaderboard(),
+        ]);
+        const leaderboardEntry = findBedwarsLeaderboardEntry(leaderboard, player);
 
         await interaction.editReply({
           content: '',
-          embeds: [buildBedwarsGeneralEmbed(player, footerIcon, xpTable)],
+          embeds: [buildBedwarsGeneralEmbed(player, footerIcon, xpTable, 'total', leaderboardEntry)],
           components: [buildBedwarsGeneralModeSelect(player.account.username)],
         });
         return;
@@ -161,6 +207,26 @@ export default {
           embeds: [],
           components,
           files: [attachment],
+        });
+        return;
+      }
+
+      if (subcommand === 'semanal') {
+        await interaction.editReply({
+          content: '',
+          embeds: [buildBedwarsWeeklyEmbed(player, footerIcon)],
+          components: [buildBedwarsWeeklyModeSelect(player.account.username)],
+        });
+        return;
+      }
+
+      if (subcommand === 'sessao') {
+        const session = ensureSession(interaction.user.id, player);
+
+        await interaction.editReply({
+          content: '',
+          embeds: [buildBedwarsSessionEmbed(player, footerIcon, session.baseline)],
+          components: [buildBedwarsSessionModeSelect(interaction.user.id)],
         });
         return;
       }

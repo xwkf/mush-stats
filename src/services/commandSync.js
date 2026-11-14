@@ -1,4 +1,9 @@
-import { REST, Routes } from 'discord.js';
+import {
+  ApplicationIntegrationType,
+  InteractionContextType,
+  REST,
+  Routes,
+} from 'discord.js';
 import { config } from '../config.js';
 import { logger } from '../core/logger.js';
 import { readCommandModules } from '../handlers/commands.js';
@@ -38,34 +43,42 @@ async function withRetry(label, fn, attempts = 4) {
 
 export async function syncCommands() {
   const commands = await readCommandModules();
-  const body = commands.map((command) => command.data.toJSON());
+  const body = commands.map((command) => ({
+    ...command.data.toJSON(),
+    integration_types: [
+      ApplicationIntegrationType.GuildInstall,
+      ApplicationIntegrationType.UserInstall,
+    ],
+    contexts: [
+      InteractionContextType.Guild,
+      InteractionContextType.BotDM,
+      InteractionContextType.PrivateChannel,
+    ],
+  }));
   const rest = new REST({ version: '10', timeout: 30_000 }).setToken(config.token);
   const names = body.map((command) => command.name).join(', ');
 
-  const guilds = config.guildId
-    ? [{ id: config.guildId }]
-    : await withRetry('Buscar servidores', () => rest.get(Routes.userGuilds()));
+  await withRetry('Registrar comandos globais', () =>
+    rest.put(Routes.applicationCommands(config.clientId), { body }),
+  );
+  logger.info(`${body.length} comando(s) globais registrados: ${names}`);
+  logger.info('Contextos ativos: servidor, DM do bot e canais privados (user install).');
 
-  if (guilds.length === 0) {
-    await withRetry('Registrar comandos globais', () =>
-      rest.put(Routes.applicationCommands(config.clientId), { body }),
-    );
-    logger.info(`${body.length} comando(s) registrados globalmente: ${names}`);
-    return;
+  let guilds = [];
+  try {
+    guilds = await withRetry('Buscar servidores', () => rest.get(Routes.userGuilds()));
+  } catch (error) {
+    logger.warn(`Não foi possível listar servidores para limpar comandos antigos: ${error.message}`);
+    if (config.guildId) guilds = [{ id: config.guildId }];
   }
 
   for (const guild of guilds) {
-    await withRetry(`Registrar comandos em ${guild.name ?? guild.id}`, () =>
-      rest.put(Routes.applicationGuildCommands(config.clientId, guild.id), { body }),
-    );
-    logger.info(
-      `${body.length} comando(s) registrados no servidor ${guild.name ?? guild.id} (instantâneo).`,
+    await withRetry(`Remover comandos antigos de ${guild.name ?? guild.id}`, () =>
+      rest.put(Routes.applicationGuildCommands(config.clientId, guild.id), { body: [] }),
     );
   }
 
-  await withRetry('Remover comandos globais duplicados', () =>
-    rest.put(Routes.applicationCommands(config.clientId), { body: [] }),
-  );
-  logger.info('Comandos globais removidos para evitar duplicação.');
-  logger.info(`Comandos ativos: ${names}`);
+  if (guilds.length > 0) {
+    logger.info('Comandos antigos de servidor removidos; usando apenas os globais.');
+  }
 }

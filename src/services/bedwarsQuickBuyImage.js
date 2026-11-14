@@ -124,32 +124,54 @@ function getBackground() {
   return backgroundPromise;
 }
 
+async function fetchTextureBuffer(folder, name) {
+  let lastError = null;
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      return await Promise.any(
+        TEXTURE_BASES.map(async (base) => {
+          const response = await fetch(`${base}/${folder}/${name}.png`, {
+            signal: AbortSignal.timeout(8000),
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+
+          return Buffer.from(await response.arrayBuffer());
+        }),
+      );
+    } catch (error) {
+      lastError = error;
+
+      if (attempt === 0) {
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
+    }
+  }
+
+  const detail =
+    lastError?.errors?.map((error) => error.message).join('; ') ||
+    lastError?.message ||
+    lastError?.code ||
+    'erro desconhecido';
+  throw new Error(detail);
+}
+
 function loadTexture(folder, name) {
   const key = `${folder}/${name}`;
 
   if (!textureCache.has(key)) {
     const promise = (async () => {
-      let lastError = null;
-
-      for (const base of TEXTURE_BASES) {
-        for (let attempt = 0; attempt < 2; attempt += 1) {
-          try {
-            return await loadImage(`${base}/${folder}/${name}.png`);
-          } catch (error) {
-            lastError = error;
-
-            if (attempt === 0) {
-              await new Promise((resolve) => setTimeout(resolve, 200));
-            }
-          }
-        }
+      try {
+        const buffer = await fetchTextureBuffer(folder, name);
+        return await loadImage(buffer);
+      } catch (error) {
+        logger.warn(`Falha ao carregar textura ${key}: ${error.message}`);
+        textureCache.delete(key);
+        return null;
       }
-
-      logger.warn(
-        `Falha ao carregar textura ${key}: ${lastError?.message || lastError?.code || 'erro desconhecido'}`,
-      );
-      textureCache.delete(key);
-      return null;
     })();
 
     textureCache.set(key, promise);
@@ -179,7 +201,7 @@ function roundedRect(ctx, x, y, w, h, radius = 8) {
 
 function drawPanel(ctx, { x, y, w, h }) {
   roundedRect(ctx, x, y, w, h, 10);
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.58)';
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.80)';
   ctx.fill();
 }
 
@@ -188,9 +210,9 @@ function drawSlot(ctx, cx, cy, variant = 'normal') {
   const y = Math.round(cy - SLOT_SIZE / 2);
 
   const fills = {
-    normal: 'rgba(0, 0, 0, 0.42)',
-    selected: 'rgba(50, 80, 25, 0.55)',
-    pane: 'rgba(0, 0, 0, 0.32)',
+    normal: 'rgba(0, 0, 0, 0.62)',
+    selected: 'rgba(50, 80, 25, 0.70)',
+    pane: 'rgba(0, 0, 0, 0.50)',
   };
 
   roundedRect(ctx, x, y, SLOT_SIZE, SLOT_SIZE, 6);

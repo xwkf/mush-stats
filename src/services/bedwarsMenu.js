@@ -33,6 +33,8 @@ const MISSION_COLORS = {
   weekly: 0xd8c927,
 };
 
+const BEDWARS_GENERAL_COLOR = 0xff55ff;
+
 const LEGACY_COLORS = {
   0: 0x000000,
   1: 0x0000aa,
@@ -94,20 +96,44 @@ function getXpProgress(xp, level, table) {
   if (!table) return null;
 
   const currentXp = Number(xp);
-  const floor = Number(table[level]);
-  const next = Number(table[Number(level) + 1]);
+  const numericLevel = Number(level);
 
-  if (
-    !Number.isFinite(currentXp) ||
-    !Number.isFinite(floor) ||
-    !Number.isFinite(next) ||
-    next <= floor
-  ) {
-    return null;
+  if (!Number.isFinite(currentXp) || !Number.isFinite(numericLevel)) return null;
+
+  let floor = Number(table[numericLevel]);
+  let next = Number(table[numericLevel + 1]);
+
+  if (!Number.isFinite(floor) || !Number.isFinite(next) || next <= floor) {
+    const levels = Object.keys(table)
+      .map(Number)
+      .filter(Number.isFinite);
+    const maxLevel = Math.max(...levels);
+    const maxLevelXp = Number(table[maxLevel]);
+
+    if (numericLevel < maxLevel || !Number.isFinite(maxLevelXp)) return null;
+
+    const span = 105_000;
+    floor = maxLevelXp + (numericLevel - maxLevel) * span;
+    next = floor + span;
   }
 
   const earned = Math.max(0, Math.min(currentXp - floor, next - floor));
   return `[${formatNumber(earned)}/${formatNumber(next - floor)}]`;
+}
+
+function getLeaderboardLine(player, leaderboardEntry) {
+  const position = Number(leaderboardEntry?.pos);
+
+  if (!Number.isFinite(position) || position < 1) return null;
+
+  const medal = { 1: '🥇', 2: '🥈', 3: '🥉' }[position];
+  const username = player.account.username;
+
+  if (medal) {
+    return `» **${username}** está ocupando o ${medal} **${position}º** lugar no [pódio](https://mush.com.br/leaderboard/bedwars)!`;
+  }
+
+  return `» **${username}** está na **${position}º** posição no [ranking](https://mush.com.br/leaderboard/bedwars)!`;
 }
 
 function getDaily(stats, prefix, field) {
@@ -118,6 +144,19 @@ function getDaily(stats, prefix, field) {
 function getMonthly(stats, prefix, field) {
   const key = prefix ? `${prefix}_${field}_monthly` : `${field}_monthly`;
   return stats[key] ?? 0;
+}
+
+function getWeekly(stats, prefix, field) {
+  const key = prefix ? `${prefix}_${field}_weekly` : `${field}_weekly`;
+  return stats[key] ?? 0;
+}
+
+function getSessionValue(stats, baseline, prefix, field) {
+  const key = prefix ? `${prefix}_${field}` : field;
+  const current = Number(stats[key] ?? 0);
+  const initial = Number(baseline?.[key] ?? 0);
+
+  return Math.max(0, current - initial);
 }
 
 function getGeneral(stats, prefix, field) {
@@ -217,7 +256,102 @@ export function buildBedwarsMonthlyEmbed(player, footerIconURL, modeKey = 'total
     });
 }
 
-export function buildBedwarsGeneralEmbed(player, footerIconURL, xpTable, modeKey = 'total') {
+export function buildBedwarsWeeklyEmbed(player, footerIconURL, modeKey = 'total') {
+  const mode = MODES.find((item) => item.key === modeKey) ?? MODES[0];
+  const stats = player.stats?.bedwars ?? {};
+  const uuid = (player.account.unique_id ?? '').replaceAll('-', '');
+  const slim = player.skin?.slim ? 'true' : 'false';
+  const icon = getEmoji('BedWars');
+
+  const description = [
+    `• **Níveis adquiridos**: ${formatNumber(getWeekly(stats, mode.prefix, 'level'))}`,
+    `• **XP adquirido**: ${formatNumber(getWeekly(stats, mode.prefix, 'xp'))}`,
+    '',
+    `• **Camas quebradas**: ${formatNumber(getWeekly(stats, mode.prefix, 'beds_broken'))}`,
+    '',
+    `• **Abates**: ${formatNumber(getWeekly(stats, mode.prefix, 'kills'))}`,
+    `• **Abates finais**: ${formatNumber(getWeekly(stats, mode.prefix, 'final_kills'))}`,
+    '',
+    `• **Vitórias**: ${formatNumber(getWeekly(stats, mode.prefix, 'wins'))}`,
+    `• **Winstreak**: ${formatNumber(getWeekly(stats, mode.prefix, 'winstreak'))}`,
+  ].join('\n');
+
+  return new EmbedBuilder()
+    .setColor(parseColor(player.profile_tag?.color ?? player.rank_tag?.color))
+    .setTitle(`${icon ? `${icon}・` : ''}Bed Wars (Semanal): ${player.account.username}`)
+    .setDescription(description)
+    .setThumbnail(`https://visage.surgeplay.com/face/256/${uuid}?y=-40&slim=${slim}`)
+    .setFooter({
+      text: 'Desenvolvido por xwqk',
+      iconURL: footerIconURL,
+    });
+}
+
+export function buildBedwarsSessionEmbed(player, footerIconURL, baseline, modeKey = 'total') {
+  const mode = MODES.find((item) => item.key === modeKey) ?? MODES[0];
+  const stats = player.stats?.bedwars ?? {};
+  const uuid = (player.account.unique_id ?? '').replaceAll('-', '');
+  const slim = player.skin?.slim ? 'true' : 'false';
+  const icon = getEmoji('BedWars');
+
+  const levels = getSessionValue(stats, baseline, mode.prefix, 'level');
+  const xp = getSessionValue(stats, baseline, mode.prefix, 'xp');
+  const bedsBroken = getSessionValue(stats, baseline, mode.prefix, 'beds_broken');
+  const bedsLost = getSessionValue(stats, baseline, mode.prefix, 'beds_lost');
+  const kills = getSessionValue(stats, baseline, mode.prefix, 'kills');
+  const deaths = getSessionValue(stats, baseline, mode.prefix, 'deaths');
+  const finalKills = getSessionValue(stats, baseline, mode.prefix, 'final_kills');
+  const finalDeaths = getSessionValue(stats, baseline, mode.prefix, 'final_deaths');
+  const wins = getSessionValue(stats, baseline, mode.prefix, 'wins');
+  const losses = getSessionValue(stats, baseline, mode.prefix, 'losses');
+  const gamesPlayed = getSessionValue(stats, baseline, mode.prefix, 'games_played');
+  const winstreak = getSessionValue(stats, baseline, mode.prefix, 'winstreak');
+  const maxWinstreak = getSessionValue(stats, baseline, mode.prefix, 'max_winstreak');
+  const winRate = gamesPlayed > 0 ? ((wins / gamesPlayed) * 100).toFixed(2) : '0.00';
+
+  const description = [
+    `• **Níveis adquiridos**: ${formatNumber(levels)}`,
+    `• **XP adquirido**: ${formatNumber(xp)}`,
+    '',
+    `• **Camas quebradas**: ${formatNumber(bedsBroken)}`,
+    `• **Camas perdidas**: ${formatNumber(bedsLost)}`,
+    '',
+    `• **Abates**: ${formatNumber(kills)}`,
+    `• **Mortes**: ${formatNumber(deaths)}`,
+    `• **Abates finais**: ${formatNumber(finalKills)}`,
+    `• **Mortes finais**: ${formatNumber(finalDeaths)}`,
+    '',
+    `• **Vitórias**: ${formatNumber(wins)} (${winRate}%)`,
+    `• **Derrotas**: ${formatNumber(losses)}`,
+    `• **Partidas jogadas**: ${formatNumber(gamesPlayed)}`,
+    '',
+    `• **Winstreak**: ${formatNumber(winstreak)}`,
+    `• **Maior Winstreak**: ${formatNumber(maxWinstreak)}`,
+    '',
+    `• **KDR**: ${formatRatio(kills, deaths)}`,
+    `• **WLR**: ${formatRatio(wins, losses)}`,
+    `• **FKDR**: ${formatRatio(finalKills, finalDeaths)}`,
+    `• **BBLR**: ${formatRatio(bedsBroken, bedsLost)}`,
+  ].join('\n');
+
+  return new EmbedBuilder()
+    .setColor(parseColor(player.profile_tag?.color ?? player.rank_tag?.color))
+    .setTitle(`${icon ? `${icon}・` : ''}Bed Wars (Sessão): ${player.account.username}`)
+    .setDescription(description)
+    .setThumbnail(`https://visage.surgeplay.com/face/256/${uuid}?y=-40&slim=${slim}`)
+    .setFooter({
+      text: 'Desenvolvido por xwqk',
+      iconURL: footerIconURL,
+    });
+}
+
+export function buildBedwarsGeneralEmbed(
+  player,
+  footerIconURL,
+  xpTable,
+  modeKey = 'total',
+  leaderboardEntry = null,
+) {
   const mode = MODES.find((item) => item.key === modeKey) ?? MODES[0];
   const stats = player.stats?.bedwars ?? {};
   const uuid = (player.account.unique_id ?? '').replaceAll('-', '');
@@ -226,10 +360,7 @@ export function buildBedwarsGeneralEmbed(player, footerIconURL, xpTable, modeKey
   const level = Number(stats.level ?? 0);
   const xp = Number(stats.xp ?? 0);
   const xpProgress = getXpProgress(xp, level, xpTable);
-  const levelColor = getLevelColor(
-    stats.level_badge,
-    parseColor(player.profile_tag?.color ?? player.rank_tag?.color),
-  );
+  const leaderboardLine = getLeaderboardLine(player, leaderboardEntry);
 
   const bedsBroken = getGeneral(stats, mode.prefix, 'beds_broken');
   const bedsLost = getGeneral(stats, mode.prefix, 'beds_lost');
@@ -249,6 +380,7 @@ export function buildBedwarsGeneralEmbed(player, footerIconURL, xpTable, modeKey
   const description = [
     `• **Nível**: ${getLevelDisplay(stats.level_badge, level)}`,
     `• **XP**: ${formatNumber(xp)}${xpProgress ? ` ➜ ${xpProgress}` : ''}`,
+    ...(leaderboardLine ? [leaderboardLine] : []),
     '',
     `• **Camas quebradas**: ${formatNumber(bedsBroken)}`,
     `• **Camas perdidas**: ${formatNumber(bedsLost)}`,
@@ -275,7 +407,7 @@ export function buildBedwarsGeneralEmbed(player, footerIconURL, xpTable, modeKey
   ].join('\n');
 
   return new EmbedBuilder()
-    .setColor(levelColor)
+    .setColor(BEDWARS_GENERAL_COLOR)
     .setTitle(`${icon ? `${icon}・` : ''}Bed Wars (Geral): ${player.account.username}`)
     .setDescription(description)
     .setThumbnail(`https://visage.surgeplay.com/face/256/${uuid}?y=-40&slim=${slim}`)
@@ -421,4 +553,12 @@ export function buildBedwarsGeneralModeSelect(username, selectedMode = 'total') 
 
 export function buildBedwarsMonthlyModeSelect(username, selectedMode = 'total') {
   return buildModeSelect(username, selectedMode, 'bedwars_monthly_mode');
+}
+
+export function buildBedwarsWeeklyModeSelect(username, selectedMode = 'total') {
+  return buildModeSelect(username, selectedMode, 'bedwars_weekly_mode');
+}
+
+export function buildBedwarsSessionModeSelect(discordId, selectedMode = 'total') {
+  return buildModeSelect(discordId, selectedMode, 'bedwars_session_mode');
 }

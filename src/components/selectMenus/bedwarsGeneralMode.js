@@ -5,7 +5,7 @@ import {
   buildBedwarsGeneralEmbed,
   buildBedwarsGeneralModeSelect,
 } from '../../services/bedwarsMenu.js';
-import { fetchBedwarsXpTable, fetchPlayer } from '../../services/mush.js';
+import { fetchBedwarsLeaderboard, fetchBedwarsXpTable, fetchPlayer, findBedwarsLeaderboardEntry } from '../../services/mush.js';
 import { getFooterIcon } from '../../utils/footer.js';
 
 export default {
@@ -18,9 +18,10 @@ export default {
     await interaction.deferUpdate();
 
     try {
-      const [player, xpTable] = await Promise.all([
+      const [player, xpTable, leaderboard] = await Promise.all([
         username ? fetchPlayer(username) : null,
         fetchBedwarsXpTable(),
+        fetchBedwarsLeaderboard(),
       ]);
 
       if (!player) {
@@ -32,9 +33,10 @@ export default {
       }
 
       const footerIcon = await getFooterIcon(interaction.client);
+      const leaderboardEntry = findBedwarsLeaderboardEntry(leaderboard, player);
 
       await interaction.editReply({
-        embeds: [buildBedwarsGeneralEmbed(player, footerIcon, xpTable, mode)],
+        embeds: [buildBedwarsGeneralEmbed(player, footerIcon, xpTable, mode, leaderboardEntry)],
         components: [buildBedwarsGeneralModeSelect(player.account.username, mode)],
       });
     } catch (error) {

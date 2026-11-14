@@ -1,8 +1,10 @@
 import { SlashCommandBuilder } from 'discord.js';
 import { logger } from '../core/logger.js';
 import { getEmoji } from '../services/applicationEmojis.js';
+import { buildLinkAccountEmbed } from '../services/linkAccountEmbed.js';
 import { getLinkedNick, saveLink } from '../services/links.js';
 import { fetchParkour, fetchPlayer } from '../services/mush.js';
+import { isValidNick } from '../services/playerResolver.js';
 import { buildMenuButtons, buildMenuEmbed } from '../services/mushMenu.js';
 
 const FOOTER_USER_ID = '1458632297380057316';
@@ -21,7 +23,7 @@ async function getFooterIcon(client) {
 function getNickCandidates(user) {
   const candidates = [user.username, user.globalName]
     .filter((value) => typeof value === 'string')
-    .filter((value) => /^[A-Za-z0-9_]{3,16}$/.test(value));
+    .filter((value) => isValidNick(value));
 
   return [...new Set(candidates)];
 }
@@ -40,12 +42,20 @@ export default {
   async execute(interaction) {
     const loadingEmoji = getEmoji('Relogiozinho') || '⏳';
     const errorEmoji = getEmoji('Errado') || '❌';
+    const botErrorEmoji = getEmoji('ErradoBOT') || errorEmoji;
 
     await interaction.reply({ content: `${loadingEmoji} **»** Carregando...` });
 
     const nick = interaction.options.getString('nick')?.trim();
 
     try {
+      if (nick && !isValidNick(nick)) {
+        await interaction.editReply({
+          content: `${botErrorEmoji} **»** O nick inserido possui caracteres inválidas.`,
+        });
+        return;
+      }
+
       let player = null;
 
       if (nick) {
@@ -67,11 +77,13 @@ export default {
       }
 
       if (!player) {
-        const message = nick
-          ? `Jogador \`${nick}\` não encontrado.`
-          : 'Nenhuma conta vinculada ao seu Discord foi encontrada. Use `/menu <nick>` uma vez para vincular.';
-
-        await interaction.editReply({ content: `${errorEmoji} **»** ${message}` });
+        if (nick) {
+          await interaction.editReply({
+            content: `${botErrorEmoji} **»** Este jogador não está registrado.`,
+          });
+        } else {
+          await interaction.editReply({ embeds: [buildLinkAccountEmbed()] });
+        }
         return;
       }
 
