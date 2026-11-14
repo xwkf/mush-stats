@@ -1,54 +1,63 @@
 import { logger } from '../core/logger.js';
-import { resolveSource } from '../constants/compare.js';
 
 const API_BASE = 'https://mush.com.br/api';
 
-// ---------------------------------------------------------------------------
-// ATENÇÃO: o formato exato de /api/leaderboard/<jogo> (parâmetros de modo/período e
-// campos dos registros) não está no código do bot. Tudo o que depende disso fica
-// aqui (buildUrl + normalizeRecord), para ajustar em um lugar só.
-// ---------------------------------------------------------------------------
-function buildUrl(game, mode, type) {
-  const url = new URL(`${API_BASE}/leaderboard/${game.endpoint}`);
-  if (mode.prefix) url.searchParams.set('mode', mode.prefix);
-  if (type.param) url.searchParams.set('period', type.param);
-  return url.toString();
+function readGroup(record, source) {
+  const flat = {};
+
+  for (const [rawKey, value] of Object.entries(record ?? {})) {
+    const separator = rawKey.indexOf(':');
+    if (separator === -1) continue;
+
+    const group = rawKey.slice(0, separator);
+    if (!source.includes(group)) continue;
+
+    flat[rawKey.slice(separator + 1)] = value;
+  }
+
+  if (Object.keys(flat).length > 0) return flat;
+
+  return (
+    source
+      .map((name) => record?.stats?.[name] ?? record?.[name])
+      .find((value) => value && typeof value === 'object') ?? {}
+  );
 }
 
-export function normalizeRecord(record, index, game, mode, type) {
+export function normalizeRecord(record, index, game) {
   const account = record.account ?? record.player ?? {};
-  const container = record.stats ?? record;
-
-  let { group, prefix } = resolveSource(container, game.source);
-  if (Object.keys(group).length === 0) group = record.stats ?? record;
-  if (mode.prefix) prefix = mode.prefix;
-  else if (mode.prefix === '') prefix = '';
-
-  const badge = group.level_badge?.format ?? record.level_badge?.format ?? null;
+  const group = readGroup(record, game.source);
   const level = Number(group.level ?? record.level ?? 0);
+  const badge = group.level_badge?.format ?? record.level_badge?.format ?? null;
 
   return {
     position: Number(record.pos ?? record.position ?? index + 1),
     uuid: String(account.unique_id ?? record.unique_id ?? '').replaceAll('-', ''),
     username: account.username ?? record.username ?? record.name ?? '???',
-    nameColor: record.best_tag?.color ?? record.profile_tag?.color ?? record.rank_tag?.color,
+    nameColor:
+      record.color ??
+      record.best_tag?.color ??
+      record.profile_tag?.color ??
+      record.rank_tag?.color,
     clan: record.clan?.tag ? { tag: record.clan.tag, color: record.clan.tag_color } : null,
-    badge: game.showLevel || badge ? badge : null,
+    badge,
     level: game.showLevel ? level : 0,
-    values: game.columns.map((column) => column.read(group, prefix, type.suffix)),
+    values: game.columns.map((column) => column.read(group, '', '')),
   };
 }
 
-export async function fetchLeaderboardTop(game, mode, type, limit = 10) {
+export async function fetchLeaderboardTop(game, limit = 10) {
   try {
-    const response = await fetch(buildUrl(game, mode, type), { signal: AbortSignal.timeout(15_000) });
+    const response = await fetch(`${API_BASE}/leaderboard/${game.endpoint}`, {
+      signal: AbortSignal.timeout(15_000),
+    });
     const body = await response.json();
     const records = body?.records ?? body?.response?.records ?? body?.response;
 
     if (!response.ok || !Array.isArray(records)) return null;
 
     return records
-      .map((record, index) => normalizeRecord(record, index, game, mode, type))
+      .map((record, index) => normalizeRecord(record, index, game))
       .sort((a, b) => a.position - b.position)
       .slice(0, limit);
   } catch (error) {

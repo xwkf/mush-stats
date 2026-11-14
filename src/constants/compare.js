@@ -39,12 +39,20 @@ export const stat = (label, ...names) => ({
   read: (stats, prefix, suffix) => read(stats, prefix, names, suffix),
 });
 
-export const ratio = (label, numerator, denominator) => ({
-  label,
-  format: 'ratio',
-  read: (stats, prefix, suffix) =>
-    divide(read(stats, prefix, numerator, suffix), read(stats, prefix, denominator, suffix)),
-});
+export const ratio = (label, numerator, denominator) => {
+  const numerators = Array.isArray(numerator) ? numerator : [numerator];
+  const denominators = Array.isArray(denominator) ? denominator : [denominator];
+
+  return {
+    label,
+    format: 'ratio',
+    read: (stats, prefix, suffix) =>
+      divide(
+        read(stats, prefix, numerators, suffix),
+        read(stats, prefix, denominators, suffix),
+      ),
+  };
+};
 
 // Nos modos Party, o total pode vir só por minigame (ex.: block_party_first_place).
 const partyPlace = (label, place) => ({
