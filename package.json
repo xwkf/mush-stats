@@ -1,0 +1,23 @@
+{
+  "name": "mush-stats",
+  "version": "1.0.0",
+  "description": "Estrutura base de um bot de Discord em JavaScript",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "prestart": "node src/force-deploy.js",
+    "predev": "node src/force-deploy.js",
+    "start": "node --watch src/index.js",
+    "dev": "node --watch src/index.js",
+    "force": "node src/force-deploy.js",
+    "start:prod": "node src/force-deploy.js && node src/index.js",
+    "deploy": "node src/deploy-commands.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "discord.js": "^14.28.1",
+    "dotenv": "^18.0.10"
+  }
+}
