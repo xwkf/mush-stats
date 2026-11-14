@@ -46,6 +46,21 @@ export async function fetchMissions(username) {
   }
 }
 
+export async function fetchBedwarsQuickBuy(username) {
+  try {
+    const response = await fetch(
+      `${API_BASE}/player/name/${encodeURIComponent(username)}/bedwars`,
+    );
+    const body = await response.json();
+
+    if (!response.ok || !body?.success) return null;
+    return body.response;
+  } catch (error) {
+    logger.warn(`Falha ao buscar a Compra Rápida de "${username}": ${error.message}`);
+    return null;
+  }
+}
+
 export async function fetchBedwarsXpTable() {
   if (bedwarsXpTable) return bedwarsXpTable;
 

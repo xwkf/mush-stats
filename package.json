@@ -18,6 +18,8 @@
   },
   "dependencies": {
     "discord.js": "^14.28.1",
-    "dotenv": "^18.0.10"
+    "dotenv": "^18.0.10",
+    "minecraft-font-renderer": "^2.0.0",
+    "skia-canvas": "^3.0.8"
   }
 }

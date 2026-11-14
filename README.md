@@ -11,6 +11,7 @@ Bot de Discord não oficial para consultar estatísticas de jogadores no MushMC.
 - `/bedwars mensal [nick]`: estatísticas mensais do Bed Wars, com seleção de modo.
 - `/bedwars diario [nick]`: estatísticas diárias do Bed Wars, com seleção de modo.
 - `/bedwars missoes [nick]`: missões diárias, semanais e totais do Bed Wars.
+- `/bedwars quickbuy [nick]`: imagem (fundo transparente) do menu de Compra Rápida e da hotbar do jogador.
 - Resolução automática da conta vinculada ao Discord, com fallback pelo nick do usuário.
 - Select menus para alternar entre Total, Mega, Solo, Duplas, Trios, Quartetos, 1v1, 2v2, 3v3, 4v4 e 4s.
 - Select menu de missões para alternar entre Total, Diárias e Semanais.
@@ -25,6 +26,7 @@ Bot de Discord não oficial para consultar estatísticas de jogadores no MushMC.
 | `/bedwars mensal [nick]` | Mostra as estatísticas mensais do Bed Wars. |
 | `/bedwars diario [nick]` | Mostra as estatísticas diárias do Bed Wars. |
 | `/bedwars missoes [nick]` | Mostra as missões diárias, semanais e totais do Bed Wars. |
+| `/bedwars quickbuy [nick]` | Gera a imagem da Compra Rápida e da hotbar do jogador no Bed Wars. |
 
 O parâmetro `nick` é opcional. Sem ele, o bot tenta usar a conta vinculada ao Discord de quem executou o comando.
 
@@ -118,6 +120,9 @@ src/
 - `GET https://mush.com.br/api/player/{name|uuid|profileid}`
 - `GET https://mush.com.br/api/player/name/{username}/parkour`
 - `GET https://mush.com.br/api/player/name/{username}/missions`
+- `GET https://mush.com.br/api/player/name/{username}/bedwars` (`quick_buy_layout` e `hotbar`)
 - `GET https://mush.com.br/api/games/bedwars/xptable`
+- `GET https://vzge.me/bust/512/{uuid}.png` (skin)
+- `GET https://raw.githubusercontent.com/PrismarineJS/minecraft-assets/master/data/1.8.8/{items|blocks}/{textura}.png` (ícones dos itens)
 
 Este projeto não é afiliado ao MushMC.

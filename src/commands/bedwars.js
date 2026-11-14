@@ -1,4 +1,4 @@
-import { SlashCommandBuilder } from 'discord.js';
+import { AttachmentBuilder, SlashCommandBuilder } from 'discord.js';
 import { logger } from '../core/logger.js';
 import { getEmoji } from '../services/applicationEmojis.js';
 import {
@@ -11,7 +11,8 @@ import {
   buildBedwarsMonthlyEmbed,
   buildBedwarsMonthlyModeSelect,
 } from '../services/bedwarsMenu.js';
-import { fetchBedwarsXpTable, fetchMissions } from '../services/mush.js';
+import { renderQuickBuyImage } from '../services/bedwarsQuickBuyImage.js';
+import { fetchBedwarsQuickBuy, fetchBedwarsXpTable, fetchMissions } from '../services/mush.js';
 import { resolvePlayer } from '../services/playerResolver.js';
 import { getFooterIcon } from '../utils/footer.js';
 
@@ -46,6 +47,17 @@ export default {
       subcommand
         .setName('missoes')
         .setDescription('⌈Mush⌋ Verifique as missões de um jogador no Bed Wars.')
+        .addStringOption((option) =>
+          option
+            .setName('nick')
+            .setDescription('Nick do jogador (opcional)')
+            .setRequired(false),
+        ),
+    )
+    .addSubcommand((subcommand) =>
+      subcommand
+        .setName('quickbuy')
+        .setDescription('⌈Mush⌋ Verifique o menu de Compra Rápida de um jogador no Bed Wars.')
         .addStringOption((option) =>
           option
             .setName('nick')
@@ -103,6 +115,30 @@ export default {
           content: '',
           embeds: [buildBedwarsMonthlyEmbed(player, footerIcon)],
           components: [buildBedwarsMonthlyModeSelect(player.account.username)],
+        });
+        return;
+      }
+
+      if (subcommand === 'quickbuy') {
+        const quickBuy = await fetchBedwarsQuickBuy(player.account.username);
+
+        if (!quickBuy) {
+          await interaction.editReply({
+            content: `${errorEmoji} **»** Não foi possível buscar a Compra Rápida agora.`,
+          });
+          return;
+        }
+
+        const image = await renderQuickBuyImage(player, quickBuy);
+        const attachment = new AttachmentBuilder(image, {
+          name: `quickbuy-${player.account.username}.png`,
+        });
+
+        await interaction.editReply({
+          content: '',
+          embeds: [],
+          components: [],
+          files: [attachment],
         });
         return;
       }
