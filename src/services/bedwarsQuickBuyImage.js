@@ -107,6 +107,10 @@ function hexToColorCode(hex, fallback = 'f') {
 // Texturas dos itens (API: PrismarineJS/minecraft-assets, versão 1.8.8)
 // ---------------------------------------------------------------------------
 const textureCache = new Map();
+const TEXTURE_BASES = [
+  'https://raw.githubusercontent.com/InventivetalentDev/minecraft-assets/1.8.8/assets/minecraft/textures',
+  ITEM_ASSETS_BASE,
+].filter((base, index, bases) => base && bases.indexOf(base) === index);
 let backgroundPromise = null;
 
 function getBackground() {
@@ -124,11 +128,29 @@ function loadTexture(folder, name) {
   const key = `${folder}/${name}`;
 
   if (!textureCache.has(key)) {
-    const promise = loadImage(`${ITEM_ASSETS_BASE}/${folder}/${name}.png`).catch((error) => {
-      logger.warn(`Falha ao carregar textura ${key}: ${error.message}`);
+    const promise = (async () => {
+      let lastError = null;
+
+      for (const base of TEXTURE_BASES) {
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          try {
+            return await loadImage(`${base}/${folder}/${name}.png`);
+          } catch (error) {
+            lastError = error;
+
+            if (attempt === 0) {
+              await new Promise((resolve) => setTimeout(resolve, 200));
+            }
+          }
+        }
+      }
+
+      logger.warn(
+        `Falha ao carregar textura ${key}: ${lastError?.message || lastError?.code || 'erro desconhecido'}`,
+      );
       textureCache.delete(key);
       return null;
-    });
+    })();
 
     textureCache.set(key, promise);
   }
@@ -157,7 +179,7 @@ function roundedRect(ctx, x, y, w, h, radius = 8) {
 
 function drawPanel(ctx, { x, y, w, h }) {
   roundedRect(ctx, x, y, w, h, 10);
-  ctx.fillStyle = 'rgba(34, 38, 46, 0.62)';
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.58)';
   ctx.fill();
 }
 
@@ -166,9 +188,9 @@ function drawSlot(ctx, cx, cy, variant = 'normal') {
   const y = Math.round(cy - SLOT_SIZE / 2);
 
   const fills = {
-    normal: 'rgba(14, 16, 20, 0.52)',
-    selected: 'rgba(104, 140, 52, 0.58)',
-    pane: 'rgba(60, 66, 72, 0.52)',
+    normal: 'rgba(0, 0, 0, 0.42)',
+    selected: 'rgba(50, 80, 25, 0.55)',
+    pane: 'rgba(0, 0, 0, 0.32)',
   };
 
   roundedRect(ctx, x, y, SLOT_SIZE, SLOT_SIZE, 6);
@@ -481,12 +503,17 @@ export async function renderQuickBuyImage(player, quickBuy) {
   ctx.imageSmoothingEnabled = false;
 
   if (background) {
-    const scale = Math.max(WIDTH / background.width, HEIGHT / background.height);
-    const sourceWidth = WIDTH / scale;
-    const sourceHeight = HEIGHT / scale;
+    const padding = 16;
+    const drawWidth = WIDTH + padding * 2;
+    const drawHeight = HEIGHT + padding * 2;
+    const scale = Math.max(drawWidth / background.width, drawHeight / background.height);
+    const sourceWidth = drawWidth / scale;
+    const sourceHeight = drawHeight / scale;
     const sourceX = (background.width - sourceWidth) / 2;
     const sourceY = (background.height - sourceHeight) / 2;
 
+    ctx.save();
+    ctx.filter = 'blur(4px)';
     ctx.imageSmoothingEnabled = true;
     ctx.drawImage(
       background,
@@ -494,11 +521,12 @@ export async function renderQuickBuyImage(player, quickBuy) {
       sourceY,
       sourceWidth,
       sourceHeight,
-      0,
-      0,
-      WIDTH,
-      HEIGHT,
+      -padding,
+      -padding,
+      drawWidth,
+      drawHeight,
     );
+    ctx.restore();
     ctx.imageSmoothingEnabled = false;
   }
 
