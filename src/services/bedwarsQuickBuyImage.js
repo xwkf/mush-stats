@@ -1,3 +1,5 @@
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Canvas, loadImage } from 'skia-canvas';
 import { FontRender, defaultFontPath } from 'minecraft-font-renderer';
 import { logger } from '../core/logger.js';
@@ -14,6 +16,8 @@ import {
 // ---------------------------------------------------------------------------
 const WIDTH = 1198;
 const HEIGHT = 804;
+const ROOT_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+const BACKGROUND_PATH = join(ROOT_DIR, 'assets', 'quickbuy-banner.png');
 
 const TITLE_PANEL = { x: 203, y: 22, w: 792, h: 51 };
 const HEADER_PANEL = { x: 35, y: 95, w: 1130, h: 53 };
@@ -26,15 +30,17 @@ const ROW_START = 215;
 const ROW_PITCH = 80;
 const HOTBAR_Y = 742;
 const SLOT_SIZE = 68;
-const ICON_SIZE = 48;
+const ICON_SIZE = 56;
 
 const QUICK_BUY_FIRST_ROW = 2;
 const QUICK_BUY_FIRST_COL = 1;
 const QUICK_BUY_COLUMNS = 7;
 const GRID_ROWS = 6;
 
-const TEXT_SIZE = 8;
-const COUNT_SIZE = 6;
+const TITLE_SIZE = 4;
+const HEADER_SIZE = 4;
+const COUNT_SIZE = 4;
+const COUNT_SCALE = 0.75;
 
 const MC_COLORS = {
   0: [0x00, 0x00, 0x00],
@@ -101,6 +107,18 @@ function hexToColorCode(hex, fallback = 'f') {
 // Texturas dos itens (API: PrismarineJS/minecraft-assets, versão 1.8.8)
 // ---------------------------------------------------------------------------
 const textureCache = new Map();
+let backgroundPromise = null;
+
+function getBackground() {
+  if (!backgroundPromise) {
+    backgroundPromise = loadImage(BACKGROUND_PATH).catch((error) => {
+      logger.warn(`Falha ao carregar o fundo da Compra Rápida: ${error.message}`);
+      return null;
+    });
+  }
+
+  return backgroundPromise;
+}
 
 function loadTexture(folder, name) {
   const key = `${folder}/${name}`;
@@ -126,30 +144,21 @@ function frameSize(image) {
 // ---------------------------------------------------------------------------
 // Desenho de painéis e slots
 // ---------------------------------------------------------------------------
-function notchedRect(ctx, x, y, w, h, n = 3) {
+function roundedRect(ctx, x, y, w, h, radius = 8) {
+  const r = Math.min(radius, w / 2, h / 2);
   ctx.beginPath();
-  ctx.moveTo(x + n, y);
-  ctx.lineTo(x + w - n, y);
-  ctx.lineTo(x + w - n, y + n);
-  ctx.lineTo(x + w, y + n);
-  ctx.lineTo(x + w, y + h - n);
-  ctx.lineTo(x + w - n, y + h - n);
-  ctx.lineTo(x + w - n, y + h);
-  ctx.lineTo(x + n, y + h);
-  ctx.lineTo(x + n, y + h - n);
-  ctx.lineTo(x, y + h - n);
-  ctx.lineTo(x, y + n);
-  ctx.lineTo(x + n, y + n);
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
   ctx.closePath();
 }
 
 function drawPanel(ctx, { x, y, w, h }) {
-  notchedRect(ctx, x, y, w, h);
-  ctx.fillStyle = 'rgba(34, 38, 46, 0.82)';
+  roundedRect(ctx, x, y, w, h, 10);
+  ctx.fillStyle = 'rgba(34, 38, 46, 0.62)';
   ctx.fill();
-  ctx.lineWidth = 3;
-  ctx.strokeStyle = 'rgba(12, 14, 18, 0.85)';
-  ctx.stroke();
 }
 
 function drawSlot(ctx, cx, cy, variant = 'normal') {
@@ -157,20 +166,14 @@ function drawSlot(ctx, cx, cy, variant = 'normal') {
   const y = Math.round(cy - SLOT_SIZE / 2);
 
   const fills = {
-    normal: 'rgba(14, 16, 20, 0.55)',
-    selected: 'rgba(104, 140, 52, 0.55)',
-    pane: 'rgba(60, 66, 72, 0.50)',
+    normal: 'rgba(14, 16, 20, 0.52)',
+    selected: 'rgba(104, 140, 52, 0.58)',
+    pane: 'rgba(60, 66, 72, 0.52)',
   };
 
+  roundedRect(ctx, x, y, SLOT_SIZE, SLOT_SIZE, 6);
   ctx.fillStyle = fills[variant] ?? fills.normal;
-  ctx.fillRect(x, y, SLOT_SIZE, SLOT_SIZE);
-
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = 'rgba(0, 0, 0, 0.55)';
-  ctx.strokeRect(x + 1, y + 1, SLOT_SIZE - 2, SLOT_SIZE - 2);
-
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
-  ctx.fillRect(x + 2, y + 2, SLOT_SIZE - 4, 2);
+  ctx.fill();
 }
 
 // ---------------------------------------------------------------------------
@@ -398,17 +401,28 @@ function buildHeaderText(player) {
   return text;
 }
 
-async function loadBust(player) {
+async function loadFullBody(player) {
   const uuid = String(player.account?.unique_id ?? '').replaceAll('-', '');
-  const target = uuid || player.account?.username;
-  if (!target) return null;
+  const targets = [...new Set([uuid, player.account?.username].filter(Boolean))];
 
-  try {
-    return await loadImage(`https://vzge.me/bust/512/${encodeURIComponent(target)}.png`);
-  } catch (error) {
-    logger.warn(`Falha ao carregar bust de "${target}": ${error.message}`);
-    return null;
+  for (const target of targets) {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        return await loadImage(`https://vzge.me/full/512/${encodeURIComponent(target)}.png`);
+      } catch (error) {
+        if (attempt === 0) {
+          await new Promise((resolve) => setTimeout(resolve, 400));
+          continue;
+        }
+
+        logger.warn(
+          `Falha ao carregar skin de "${target}": ${error.message || error.code || 'erro desconhecido'}`,
+        );
+      }
+    }
   }
+
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -422,13 +436,30 @@ function rowCenter(row) {
   return ROW_START + row * ROW_PITCH;
 }
 
-function drawCenteredText(font, ctx, text, centerX, centerY, size = TEXT_SIZE) {
+function drawCenteredText(font, ctx, text, centerX, centerY, size = TITLE_SIZE, shadow = true) {
   const { height } = font.getTextSize(text, { size });
   font.fillText(ctx, text, centerX, Math.round(centerY - height / 2), {
-    shadow: true,
+    shadow,
     size,
     align: 'center',
   });
+}
+
+function drawSlotText(font, ctx, text, cx, cy) {
+  const { width, height } = font.getTextSize(text, { size: COUNT_SIZE });
+  const drawWidth = width * COUNT_SCALE;
+  const drawHeight = height * COUNT_SCALE;
+  const x = cx + SLOT_SIZE / 2 - 3 - drawWidth;
+  const y = cy + SLOT_SIZE / 2 - 6 - drawHeight;
+
+  ctx.save();
+  ctx.translate(Math.round(x), Math.round(y));
+  ctx.scale(COUNT_SCALE, COUNT_SCALE);
+  font.fillText(ctx, text, 0, 0, {
+    shadow: true,
+    size: COUNT_SIZE,
+  });
+  ctx.restore();
 }
 
 /**
@@ -439,11 +470,37 @@ function drawCenteredText(font, ctx, text, centerX, centerY, size = TEXT_SIZE) {
  * @returns {Promise<Buffer>}
  */
 export async function renderQuickBuyImage(player, quickBuy) {
-  const [font, bust] = await Promise.all([getFont(), loadBust(player)]);
+  const [font, fullBody, background] = await Promise.all([
+    getFont(),
+    loadFullBody(player),
+    getBackground(),
+  ]);
 
   const canvas = new Canvas(WIDTH, HEIGHT);
   const ctx = canvas.getContext('2d');
   ctx.imageSmoothingEnabled = false;
+
+  if (background) {
+    const scale = Math.max(WIDTH / background.width, HEIGHT / background.height);
+    const sourceWidth = WIDTH / scale;
+    const sourceHeight = HEIGHT / scale;
+    const sourceX = (background.width - sourceWidth) / 2;
+    const sourceY = (background.height - sourceHeight) / 2;
+
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(
+      background,
+      sourceX,
+      sourceY,
+      sourceWidth,
+      sourceHeight,
+      0,
+      0,
+      WIDTH,
+      HEIGHT,
+    );
+    ctx.imageSmoothingEnabled = false;
+  }
 
   // Painéis
   drawPanel(ctx, TITLE_PANEL);
@@ -455,9 +512,11 @@ export async function renderQuickBuyImage(player, quickBuy) {
   drawCenteredText(
     font,
     ctx,
-    '&c&lBED &f&lWARS &f&l- &e&lQUICK BUY',
+    '&4&lBED &f&lWARS &f&l- &e&lQUICK BUY',
     TITLE_PANEL.x + TITLE_PANEL.w / 2,
     TITLE_PANEL.y + TITLE_PANEL.h / 2,
+    TITLE_SIZE,
+    false,
   );
 
   // Cabeçalho: [nível] nick [CLAN]
@@ -467,25 +526,27 @@ export async function renderQuickBuyImage(player, quickBuy) {
     buildHeaderText(player),
     HEADER_PANEL.x + HEADER_PANEL.w / 2,
     HEADER_PANEL.y + HEADER_PANEL.h / 2,
+    HEADER_SIZE,
   );
 
-  // Skin (vzge.me/bust)
-  if (bust) {
+  // Skin (vzge.me/full)
+  if (fullBody) {
     ctx.save();
     ctx.beginPath();
     ctx.rect(SKIN_PANEL.x, SKIN_PANEL.y, SKIN_PANEL.w, SKIN_PANEL.h);
     ctx.clip();
 
-    const targetWidth = 330;
-    const targetHeight = Math.round((bust.height / bust.width) * targetWidth);
+    const padding = 20;
+    const maxWidth = SKIN_PANEL.w - padding * 2;
+    const maxHeight = SKIN_PANEL.h - padding * 2;
+    const scale = Math.min(maxWidth / fullBody.width, maxHeight / fullBody.height);
+    const targetWidth = Math.round(fullBody.width * scale);
+    const targetHeight = Math.round(fullBody.height * scale);
+    const targetX = Math.round(SKIN_PANEL.x + (SKIN_PANEL.w - targetWidth) / 2);
+    const targetY = Math.round(SKIN_PANEL.y + (SKIN_PANEL.h - targetHeight) / 2);
+
     ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(
-      bust,
-      Math.round(SKIN_PANEL.x + (SKIN_PANEL.w - targetWidth) / 2),
-      SKIN_PANEL.y + 45,
-      targetWidth,
-      targetHeight,
-    );
+    ctx.drawImage(fullBody, targetX, targetY, targetWidth, targetHeight);
     ctx.restore();
   }
 
@@ -521,21 +582,11 @@ export async function renderQuickBuyImage(player, quickBuy) {
     await drawIcon(ctx, def, cx, cy);
 
     if (def.count) {
-      const text = String(def.count);
-      const { width, height } = font.getTextSize(text, { size: COUNT_SIZE });
-      font.fillText(ctx, text, cx + SLOT_SIZE / 2 - 6 - width, cy + SLOT_SIZE / 2 - 6 - height, {
-        shadow: true,
-        size: COUNT_SIZE,
-      });
+      drawSlotText(font, ctx, String(def.count), cx, cy);
     }
 
     if (def.label) {
-      const text = `&6${def.label}`;
-      const { width, height } = font.getTextSize(text, { size: COUNT_SIZE });
-      font.fillText(ctx, text, cx + SLOT_SIZE / 2 - 6 - width, cy + SLOT_SIZE / 2 - 6 - height, {
-        shadow: true,
-        size: COUNT_SIZE,
-      });
+      drawSlotText(font, ctx, `&6${def.label}`, cx, cy);
     }
   }
 

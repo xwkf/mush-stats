@@ -122,7 +122,7 @@ src/
 - `GET https://mush.com.br/api/player/name/{username}/missions`
 - `GET https://mush.com.br/api/player/name/{username}/bedwars` (`quick_buy_layout` e `hotbar`)
 - `GET https://mush.com.br/api/games/bedwars/xptable`
-- `GET https://vzge.me/bust/512/{uuid}.png` (skin)
+- `GET https://vzge.me/full/512/{uuid}.png` (skin)
 - `GET https://raw.githubusercontent.com/PrismarineJS/minecraft-assets/master/data/1.8.8/{items|blocks}/{textura}.png` (ícones dos itens)
 
 Este projeto não é afiliado ao MushMC.

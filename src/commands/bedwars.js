@@ -1,6 +1,12 @@
-import { AttachmentBuilder, SlashCommandBuilder } from 'discord.js';
+import {
+  ActionRowBuilder,
+  AttachmentBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  SlashCommandBuilder,
+} from 'discord.js';
 import { logger } from '../core/logger.js';
-import { getEmoji } from '../services/applicationEmojis.js';
+import { getEmoji, getEmojiData } from '../services/applicationEmojis.js';
 import {
   buildBedwarsDailyEmbed,
   buildBedwarsGeneralEmbed,
@@ -133,11 +139,27 @@ export default {
         const attachment = new AttachmentBuilder(image, {
           name: `quickbuy-${player.account.username}.png`,
         });
+        const code = quickBuy.quick_buy_layout?.code;
+        const components = [];
+
+        if (code) {
+          const quickBuyEmoji = getEmojiData('QuickBuy');
+          const button = new ButtonBuilder()
+            .setCustomId(`quickbuy_copy:${interaction.user.id}:${code}`)
+            .setLabel('Copiar Menu')
+            .setStyle(ButtonStyle.Secondary);
+
+          if (quickBuyEmoji) {
+            button.setEmoji({ id: quickBuyEmoji.id, name: 'QuickBuy' });
+          }
+
+          components.push(new ActionRowBuilder().addComponents(button));
+        }
 
         await interaction.editReply({
-          content: '',
+          content: `${getEmoji('Cogumelo')} **»** Entre no **[Servidor de Suporte do BOT](<https://muu.sh/mushstats>)**!`,
           embeds: [],
-          components: [],
+          components,
           files: [attachment],
         });
         return;
