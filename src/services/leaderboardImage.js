@@ -38,21 +38,30 @@ const NAME_BOX = { x: 178, w: 684 };
 const HEADER_PLAYER = { x: 127, w: 735 };
 const HEAD_SIZE = 32;
 
-// Área das colunas de estatísticas (o número de colunas varia por jogo, de 2 a 4)
-const STATS_X = 875;
-const STATS_W = 705; // 875 -> 1580
-const COLUMN_GAP = 13;
+// Área das colunas de estatísticas (o número de colunas varia por jogo, de 2 a 5)
+const STATS_X = 870;
+const STATS_W = 720; // 870 -> 1590
+const COLUMN_GAP = 10;
 
 function buildColumns(fields) {
   const count = Math.max(1, fields.length);
-  const width = (STATS_W - COLUMN_GAP * (count - 1)) / count;
+  const usable = STATS_W - COLUMN_GAP * (count - 1);
+  const totalWeight = fields.reduce((sum, field) => sum + (field.weight ?? 1), 0);
 
-  return fields.map((field, index) => ({
-    label: field.label.toUpperCase(),
-    format: field.format,
-    x: Math.round(STATS_X + index * (width + COLUMN_GAP)),
-    w: Math.round(width),
-  }));
+  let x = STATS_X;
+  return fields.map((field) => {
+    const width = usable * ((field.weight ?? 1) / totalWeight);
+    const column = {
+      key: field.key,
+      label: field.label.toUpperCase(),
+      format: field.format,
+      x: Math.round(x),
+      w: Math.round(width),
+    };
+
+    x += width + COLUMN_GAP;
+    return column;
+  });
 }
 
 function formatValue(value, format) {
@@ -126,21 +135,22 @@ function drawBackground(ctx, background) {
 }
 
 function nameSegments(entry) {
-  const segments = [];
-
-  if (entry.badge) {
-    segments.push(...parseColorCodes(entry.badge, '#aaaaaa'));
-  } else if (entry.level > 0) {
-    segments.push({ text: `[${entry.level}]`, color: '#aaaaaa', join: true });
-  }
-
-  segments.push({ text: entry.username, color: nearestMcColor(entry.nameColor) });
+  const segments = [{ text: entry.username, color: nearestMcColor(entry.nameColor) }];
 
   if (entry.clan) {
     segments.push({ text: `[${entry.clan.tag}]`, color: nearestMcColor(entry.clan.color) });
   }
 
   return segments;
+}
+
+function levelSegments(entry) {
+  if (entry.badge) {
+    const parsed = parseColorCodes(entry.badge, '#aaaaaa');
+    if (parsed.length > 0) return parsed;
+  }
+
+  return [{ text: `[${entry.level ?? 0}]`, color: '#aaaaaa', join: true }];
 }
 
 /**
@@ -224,14 +234,17 @@ export async function renderLeaderboardImage(entries, title, fields) {
     });
 
     COLUMNS.forEach((column, columnIndex) => {
-      drawText(
-        font,
-        ctx,
-        [{ text: formatValue(entry.values[columnIndex] ?? 0, column.format), color: '#ffffff' }],
-        column.x + column.w / 2,
-        cy,
-        { size: TEXT_SIZE },
-      );
+      const segments =
+        column.format === 'badge'
+          ? levelSegments(entry)
+          : [
+              {
+                text: formatValue(entry.values[column.key] ?? 0, column.format),
+                color: '#ffffff',
+              },
+            ];
+
+      drawText(font, ctx, segments, column.x + column.w / 2, cy, { size: TEXT_SIZE });
     });
   });
 
