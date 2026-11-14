@@ -53,10 +53,10 @@ const LABEL_SIZE = 5;
 const VALUE_SIZE = 6;
 const SCORE_SIZE = 12;
 
-// Direção da skin (visage.surgeplay.com): ambos olham para o centro (VS).
-//  - jogador da esquerda olha para a direita (->) => ?y=40
+// Direção da skin (visage.surgeplay.com):
+//  - jogador da esquerda: render padrão, sem rotação
 //  - jogador da direita olha para a esquerda (<-) => ?y=-40
-const SKIN_VIEW_LEFT = '?y=40';
+const SKIN_VIEW_LEFT = '';
 const SKIN_VIEW_RIGHT = '?y=-40';
 const SKIN_BASE = 'https://visage.surgeplay.com/full/832';
 

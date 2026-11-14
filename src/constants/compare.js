@@ -46,6 +46,45 @@ export const ratio = (label, numerator, denominator) => ({
     divide(read(stats, prefix, numerator, suffix), read(stats, prefix, denominator, suffix)),
 });
 
+// Nos modos Party, o total pode vir só por minigame (ex.: block_party_first_place).
+const partyPlace = (label, place) => ({
+  label,
+  format: 'int',
+  read: (stats, prefix, suffix) => {
+    const total = readFirst(stats, prefix, [place], suffix);
+    if (total !== null) return total;
+
+    const finish = suffix ? `_${place}_${suffix}` : `_${place}`;
+    let sum = 0;
+
+    for (const [name, raw] of Object.entries(stats ?? {})) {
+      if (!name.endsWith(finish)) continue;
+
+      const value = Number(raw);
+      if (Number.isFinite(value)) sum += value;
+    }
+
+    return sum;
+  },
+});
+
+// Nível quando a API não expõe "level" direto (ex.: Sky Wars) e só manda o badge.
+const levelField = {
+  label: 'Nível',
+  format: 'int',
+  read: (stats, prefix, suffix) => {
+    const level = readFirst(stats, prefix, ['level'], suffix);
+    if (level !== null) return level;
+
+    const badge = stats?.[key(prefix, 'level_badge')];
+    const minLevel = Number(badge?.min_level);
+    if (Number.isFinite(minLevel)) return minLevel;
+
+    const match = String(badge?.format ?? '').match(/\[(\d+)/);
+    return match ? Number(match[1]) : 0;
+  },
+};
+
 // WLR: vitórias / derrotas (se o jogo não tiver "derrotas", usa partidas - vitórias).
 const WLR = {
   label: 'WLR',
@@ -109,22 +148,16 @@ export const COMPARE_MODES = [
   {
     key: 'skywars',
     label: 'Sky Wars',
-    source: { stats: ['skywars', 'sky_wars'] },
+    source: { stats: ['skywars_r1', 'skywars', 'sky_wars'] },
     title: title(['SKY', COLORS.white], ['WARS', COLORS.gold]),
-    fields: [stat('Nível', 'level'), stat('Vitórias', ...WINS), stat('Abates', ...KILLS), WLR, KDR],
+    fields: [levelField, stat('Vitórias', ...WINS), stat('Abates', ...KILLS), WLR, KDR],
   },
   {
     key: 'ctf',
     label: 'CTF',
     source: { stats: ['ctf'] },
     title: title(['C', COLORS.blue], ['T', COLORS.white, true], ['F', COLORS.red, true]),
-    fields: [
-      stat('Coins', 'coins'),
-      stat('Abates', ...KILLS),
-      stat('Capturas', 'captures', 'flags_captured', 'flag_captures'),
-      stat('Retornos', 'returns', 'flags_returned', 'flag_returns'),
-      stat('Partidas', ...PLAYED),
-    ],
+    fields: [stat('Coins', 'coins'), stat('Abates', ...KILLS), stat('Partidas', ...PLAYED)],
   },
   {
     key: 'bridge',
@@ -138,14 +171,24 @@ export const COMPARE_MODES = [
     label: 'Hunger Games',
     source: { stats: ['hungergames', 'hunger_games', 'hg'] },
     title: title(['HUNGER', COLORS.gold], ['GAMES', COLORS.white]),
-    fields: [stat('Partidas', ...PLAYED), stat('Vitórias', ...WINS), stat('Abates', ...KILLS), WLR, KDR],
+    fields: [
+      stat('Partidas', ...PLAYED),
+      stat('Coins', 'coins'),
+      stat('Eventos', 'mode_event_games_played'),
+    ],
   },
   {
     key: 'minimush',
     label: 'Minimush',
-    source: { stats: ['minimush', 'mini_mush'] },
+    source: { stats: ['hungergames'], prefixes: ['mode_minimush'] },
     title: title(['MINIMUSH', COLORS.gold]),
-    fields: [stat('Partidas', ...PLAYED), stat('Vitórias', ...WINS), stat('Abates', ...KILLS), WLR, KDR],
+    fields: [
+      stat('Partidas', 'games_played'),
+      stat('Vitórias', ...WINS),
+      stat('Abates', ...KILLS),
+      stat('Mortes', ...DEATHS),
+      KDR,
+    ],
   },
   {
     key: 'party',
@@ -154,9 +197,9 @@ export const COMPARE_MODES = [
     title: title(['PARTY', COLORS.pink]),
     fields: [
       stat('Partidas', ...PLAYED),
-      stat('1° Lugar', 'first_place', 'wins', 'first'),
-      stat('2° Lugar', 'second_place', 'second'),
-      stat('3° Lugar', 'third_place', 'third'),
+      partyPlace('1° Lugar', 'first_place'),
+      partyPlace('2° Lugar', 'second_place'),
+      partyPlace('3° Lugar', 'third_place'),
       stat('Pontos', 'points'),
     ],
   },
@@ -169,7 +212,7 @@ export const COMPARE_MODES = [
       stat('Partidas', ...PLAYED),
       stat('Vitórias', ...WINS),
       stat('Abates', ...KILLS),
-      stat('Casos R.', 'solved_cases', 'cases_solved', 'cases_resolved', 'solved'),
+      stat('Moedas', 'coins_picked_up', 'coins'),
       KDR,
     ],
   },
@@ -202,14 +245,14 @@ export const COMPARE_MODES = [
   {
     key: 'hideandseek',
     label: 'Hide and Seek',
-    source: { stats: ['hideandseek', 'hide_and_seek', 'hide_n_seek', 'hns'] },
+    source: { stats: ['seek', 'hideandseek', 'hide_and_seek', 'hide_n_seek', 'hns'] },
     title: title(['HIDE', COLORS.cyan], ['AND', COLORS.white], ['SEEK', COLORS.cyan]),
     fields: [
       stat('Partidas', ...PLAYED),
       stat('Vitórias', ...WINS),
-      stat('Blocos A.', 'blocks_found', 'found_blocks', 'blocks'),
+      stat('Derrotas', ...LOSSES),
       WLR,
-      KDR,
+      stat('Blocos A.', 'hider_blocks_changed', 'blocks_found', 'found_blocks', 'blocks'),
     ],
   },
 
