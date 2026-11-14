@@ -23,7 +23,7 @@ export default {
     .addSubcommand((subcommand) =>
       subcommand
         .setName('geral')
-        .setDescription('Verifique as estatisticas Gerais de um jogador no Bed Wars')
+        .setDescription('⌈Mush⌋ Verifique as estatisticas Gerais de um jogador no Bed Wars')
         .addStringOption((option) =>
           option
             .setName('nick')
@@ -34,7 +34,7 @@ export default {
     .addSubcommand((subcommand) =>
       subcommand
         .setName('mensal')
-        .setDescription('Verifique as estatisticas Mensais de um jogador no Bed Wars.')
+        .setDescription('⌈Mush⌋ Verifique as estatisticas Mensais de um jogador no Bed Wars.')
         .addStringOption((option) =>
           option
             .setName('nick')
@@ -45,7 +45,7 @@ export default {
     .addSubcommand((subcommand) =>
       subcommand
         .setName('missoes')
-        .setDescription('Verifique as missões de um jogador no Bed Wars.')
+        .setDescription('⌈Mush⌋ Verifique as missões de um jogador no Bed Wars.')
         .addStringOption((option) =>
           option
             .setName('nick')
@@ -56,7 +56,7 @@ export default {
     .addSubcommand((subcommand) =>
       subcommand
         .setName('diario')
-        .setDescription('Verifique as estatisticas Diarias de um jogador no Bed Wars.')
+        .setDescription('⌈Mush⌋ Verifique as estatisticas Diarias de um jogador no Bed Wars.')
         .addStringOption((option) =>
           option
             .setName('nick')
