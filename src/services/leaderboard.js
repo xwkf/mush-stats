@@ -2,8 +2,34 @@ import { logger } from '../core/logger.js';
 
 const API_BASE = 'https://mush.com.br/api';
 const PROFILE_CACHE_MS = 5 * 60_000;
+const REQUEST_HEADERS = {
+  accept: 'application/json',
+  'user-agent': 'MushStats/1.0 (+https://muu.sh/mushstats)',
+};
 
 const profileCache = new Map();
+
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function fetchJson(url, { timeout = 15_000, retries = 2 } = {}) {
+  let lastError;
+
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      const response = await fetch(url, {
+        headers: REQUEST_HEADERS,
+        signal: AbortSignal.timeout(timeout),
+      });
+      const body = await response.json();
+      return { response, body };
+    } catch (error) {
+      lastError = error;
+      if (attempt < retries) await wait(400 * (attempt + 1));
+    }
+  }
+
+  throw lastError;
+}
 
 function readGroup(record, source) {
   const flat = {};
@@ -79,6 +105,7 @@ export function normalizeRecord(record, index, game, variant) {
     position: Number(record.pos ?? record.position ?? index + 1),
     uuid: String(account.unique_id ?? record.unique_id ?? '').replaceAll('-', ''),
     username: account.username ?? record.username ?? record.name ?? '???',
+    avatarUrl: record.avatar_url ?? null,
     nameColor:
       record.color ??
       record.best_tag?.color ??
@@ -97,10 +124,10 @@ async function fetchProfile(username) {
   if (cached && Date.now() - cached.at < PROFILE_CACHE_MS) return cached.profile;
 
   try {
-    const response = await fetch(`${API_BASE}/player/${encodeURIComponent(username)}`, {
-      signal: AbortSignal.timeout(10_000),
-    });
-    const body = await response.json();
+    const { response, body } = await fetchJson(
+      `${API_BASE}/player/${encodeURIComponent(username)}`,
+      { timeout: 10_000 },
+    );
     const profile = response.ok && body?.success ? body.response : null;
 
     if (profile) profileCache.set(username, { at: Date.now(), profile });
@@ -111,7 +138,7 @@ async function fetchProfile(username) {
   }
 }
 
-async function enrichEntry(entry, game) {
+async function enrichEntry(entry, game, variant) {
   const profile = await fetchProfile(entry.username);
   if (!profile) return entry;
 
@@ -130,6 +157,16 @@ async function enrichEntry(entry, game) {
     if ('xp' in entry.values) entry.values.xp = entry.xp;
   }
 
+  for (const column of variant?.columns ?? []) {
+    if (!column.field) continue;
+
+    const current = Number(entry.values[column.key]);
+    if (current > 0) continue;
+
+    const value = Number(stats[column.field]);
+    if (Number.isFinite(value)) entry.values[column.key] = value;
+  }
+
   if (profile.clan?.tag) {
     entry.clan = { tag: profile.clan.tag, color: profile.clan.tag_color };
   }
@@ -143,10 +180,7 @@ async function enrichEntry(entry, game) {
 async function fetchRecords(variant) {
   for (const endpoint of variant.endpoints ?? []) {
     try {
-      const response = await fetch(`${API_BASE}/leaderboard/${endpoint}`, {
-        signal: AbortSignal.timeout(15_000),
-      });
-      const body = await response.json();
+      const { response, body } = await fetchJson(`${API_BASE}/leaderboard/${endpoint}`);
       const records = body?.records ?? body?.response?.records ?? body?.response;
 
       if (response.ok && Array.isArray(records)) return records;
@@ -173,8 +207,18 @@ export async function fetchLeaderboardTop(game, variant, typeKey, limit = 10) {
 
       return difference || left.apiPosition - right.apiPosition;
     })
-    .slice(0, limit)
-    .map((entry, index) => ({ ...entry, position: index + 1 }));
+    .slice(0, limit);
 
-  return Promise.all(entries.map((entry) => enrichEntry(entry, game)));
+  const enriched = await Promise.all(
+    entries.map((entry) => enrichEntry(entry, game, variant)),
+  );
+
+  return enriched
+    .sort((left, right) => {
+      const difference =
+        number(right.values[typeColumn.key]) - number(left.values[typeColumn.key]);
+
+      return difference || left.apiPosition - right.apiPosition;
+    })
+    .map((entry, index) => ({ ...entry, position: index + 1 }));
 }

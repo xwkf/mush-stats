@@ -47,10 +47,10 @@ export const LEADERBOARD_GAMES = [
       geral(
         [
           badge('level', 'Nível'),
-          int('xp', 'XP', 'xp'),
           int('wins', 'Vitórias', 'wins'),
           int('kills', 'Abates', 'kills'),
-          int('final_kills', 'Kills F.', 'final_kills'),
+          int('final_kills', 'Abates F.', 'final_kills'),
+          { ...int('beds', 'Camas Q.', 'beds_broken'), sortable: false },
         ],
         { endpoints: ['bedwars'] },
       ),
@@ -276,7 +276,7 @@ export function getTypeChoices(game) {
 
   for (const variant of game.variants) {
     for (const column of variant.columns) {
-      if (seen.has(column.key)) continue;
+      if (seen.has(column.key) || column.sortable === false) continue;
       seen.add(column.key);
       choices.push({ name: column.label, value: column.key });
     }

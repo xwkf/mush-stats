@@ -44,13 +44,13 @@ export default {
     const loadingEmoji = getEmoji('Relogiozinho') || '⏳';
     const errorEmoji = getEmoji('Errado') || '❌';
 
-    await interaction.reply({ content: `${loadingEmoji} **…** Carregando...` });
+    await interaction.reply({ content: `${loadingEmoji} **»** Carregando...` });
 
     const game = LEADERBOARD_GAMES_BY_KEY.get(interaction.options.getSubcommand());
 
     try {
       if (!game) {
-        await interaction.editReply({ content: `${errorEmoji} **…** Leaderboard inválida.` });
+        await interaction.editReply({ content: `${errorEmoji} **»** Leaderboard inválida.` });
         return;
       }
 
@@ -59,7 +59,7 @@ export default {
       let variant = modeKey ? getVariant(game, modeKey) : game.variants[0];
 
       if (!variant) {
-        await interaction.editReply({ content: `${errorEmoji} **…** Modo inválido.` });
+        await interaction.editReply({ content: `${errorEmoji} **»** Modo inválido.` });
         return;
       }
 
@@ -76,7 +76,7 @@ export default {
 
       if (requestedType && !type) {
         await interaction.editReply({
-          content: `${errorEmoji} **…** Esse tipo não existe no modo **${variant.label}**.`,
+          content: `${errorEmoji} **»** Esse tipo não existe no modo **${variant.label}**.`,
         });
         return;
       }
@@ -85,7 +85,7 @@ export default {
 
       if (!entries?.length) {
         await interaction.editReply({
-          content: `${errorEmoji} **…** Não foi possível buscar a leaderboard agora.`,
+          content: `${errorEmoji} **»** Não foi possível buscar a leaderboard agora.`,
         });
         return;
       }
@@ -97,7 +97,7 @@ export default {
       );
 
       await interaction.editReply({
-        content: `${getEmoji('Cogumelo')} **…** Entre no **[Servidor de Suporte do BOT](<https://muu.sh/mushstats>)**!`,
+        content: `${getEmoji('Cogumelo')} **»** Entre no **[Servidor de Suporte do BOT](<https://muu.sh/mushstats>)**!`,
         embeds: [],
         components: [],
         files: [
@@ -109,7 +109,7 @@ export default {
     } catch (error) {
       logger.error(`Erro no comando /leaderboard ${game?.key}:`, error);
       await interaction
-        .editReply({ content: `${errorEmoji} **…** Não foi possível gerar a leaderboard agora.` })
+        .editReply({ content: `${errorEmoji} **»** Não foi possível gerar a leaderboard agora.` })
         .catch(() => {});
     }
   },

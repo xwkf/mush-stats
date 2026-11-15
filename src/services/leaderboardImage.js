@@ -89,11 +89,22 @@ function getBackground() {
 }
 
 async function loadHead(entry) {
-  const targets = [...new Set([entry.uuid, entry.username].filter(Boolean))];
+  const targets = [
+    entry.avatarUrl,
+    entry.uuid && `https://visage.surgeplay.com/face/32/${entry.uuid}.png`,
+    entry.username && `https://minotar.net/helm/${encodeURIComponent(entry.username)}/32.png`,
+  ].filter(Boolean);
 
   for (const target of targets) {
     try {
-      return await loadImage(`https://visage.surgeplay.com/face/64/${encodeURIComponent(target)}.png`);
+      const response = await fetch(target, {
+        headers: { 'user-agent': 'MushStats/1.0 (+https://muu.sh/mushstats)' },
+        signal: AbortSignal.timeout(10_000),
+      });
+
+      if (!response.ok) continue;
+
+      return await loadImage(Buffer.from(await response.arrayBuffer()));
     } catch {
       // tenta o próximo alvo
     }
@@ -134,8 +145,10 @@ function drawBackground(ctx, background) {
   ctx.imageSmoothingEnabled = false;
 }
 
-function nameSegments(entry) {
-  const segments = [{ text: entry.username, color: nearestMcColor(entry.nameColor) }];
+function nameSegments(entry, showLevel = false) {
+  const segments = showLevel ? [...levelSegments(entry)] : [];
+
+  segments.push({ text: entry.username, color: nearestMcColor(entry.nameColor) });
 
   if (entry.clan) {
     segments.push({ text: `[${entry.clan.tag}]`, color: nearestMcColor(entry.clan.color) });
@@ -150,7 +163,11 @@ function levelSegments(entry) {
     if (parsed.length > 0) return parsed;
   }
 
-  return [{ text: `[${entry.level ?? 0}]`, color: '#aaaaaa', join: true }];
+  if (Number(entry.level) > 0) {
+    return [{ text: `[${entry.level}]`, color: '#aaaaaa', join: true }];
+  }
+
+  return [];
 }
 
 /**
@@ -162,7 +179,9 @@ function levelSegments(entry) {
  * @returns {Promise<Buffer>}
  */
 export async function renderLeaderboardImage(entries, title, fields) {
-  const COLUMNS = buildColumns(fields);
+  const showLevel = fields.some((field) => field.format === 'badge');
+  const statFields = fields.filter((field) => field.format !== 'badge' && !field.hidden);
+  const COLUMNS = buildColumns(statFields);
   const rows = entries.slice(0, ROWS);
   const [font, background, heads] = await Promise.all([
     getFont(),
@@ -228,23 +247,24 @@ export async function renderLeaderboardImage(entries, title, fields) {
       );
     }
 
-    drawText(font, ctx, nameSegments(entry), NAME_BOX.x + 8, cy, {
+    drawText(font, ctx, nameSegments(entry, showLevel), NAME_BOX.x + 8, cy, {
       size: TEXT_SIZE,
       align: 'left',
+      shadow: 0.35,
     });
 
-    COLUMNS.forEach((column, columnIndex) => {
-      const segments =
-        column.format === 'badge'
-          ? levelSegments(entry)
-          : [
-              {
-                text: formatValue(entry.values[column.key] ?? 0, column.format),
-                color: '#ffffff',
-              },
-            ];
+    COLUMNS.forEach((column) => {
+      const segments = [
+        {
+          text: formatValue(entry.values[column.key] ?? 0, column.format),
+          color: '#ffffff',
+        },
+      ];
 
-      drawText(font, ctx, segments, column.x + column.w / 2, cy, { size: TEXT_SIZE });
+      drawText(font, ctx, segments, column.x + column.w / 2, cy, {
+        size: TEXT_SIZE,
+        shadow: 0.35,
+      });
     });
   });
 
